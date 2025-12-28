@@ -54,3 +54,10 @@ tests/test-bundle.js
 # Custom
 TODO
 QA
+
+# Secrets
+secrets/
+*.env
+.env.local
+# Allow .env.example to be tracked
+!.env.example

@@ -1,0 +1,32 @@
+services:
+  # Kitsu frontend - Development server
+  kitsu-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "${KITSU_DEV_PORT:-8081}:8080"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - KITSU_API_TARGET=${KITSU_API_TARGET:-http://host.docker.internal:5000}
+      - KITSU_EVENT_TARGET=${KITSU_EVENT_TARGET:-http://host.docker.internal:5001}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    profiles:
+      - dev
+
+  # Kitsu frontend - Production build
+  kitsu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${KITSU_PORT:-8080}:80"
+    environment:
+      - KITSU_API_TARGET=${KITSU_API_TARGET:-http://host.docker.internal:5000}
+      - KITSU_EVENT_TARGET=${KITSU_EVENT_TARGET:-http://host.docker.internal:5001}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
