@@ -87,6 +87,8 @@ cp .env.example .env
 |----------|-------------|---------|
 | `KITSU_PORT` | Port to expose production server on | `8080` |
 | `KITSU_DEV_PORT` | Port to expose dev server on | `8081` |
+| `KITSU_IMAGE` | Custom container image (pulls from registry) | `kitsu:latest` |
+| `KITSU_DOCKERFILE` | Dockerfile to use for building | `Dockerfile` |
 | `KITSU_API_TARGET` | Zou API endpoint | `http://localhost:5000` |
 | `KITSU_EVENT_TARGET` | Zou WebSocket endpoint | `http://localhost:5001` |
 
@@ -168,6 +170,101 @@ docker build -f Dockerfile.dev -t your-registry/kitsu:dev .
 **Image includes:**
 - Production: Built Vue app + Nginx with proxy configuration
 - Development: Node.js environment with Vite dev server
+
+## Multi-Platform Builds
+
+For deploying to different architectures (e.g., building on Mac M-series for Linux AMD64 servers):
+
+### Setup buildx
+
+```bash
+# Create multi-platform builder
+docker buildx create --name multiarch --driver docker-container --use
+docker buildx inspect --bootstrap
+```
+
+### Option 1: Build locally, then package (Recommended)
+
+This is faster as it avoids running npm/vite inside Docker emulation:
+
+```bash
+# 1. Build the app locally
+npm run build
+
+# 2. Build and push multi-platform image using Dockerfile.prod
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -f Dockerfile.prod \
+  -t your-registry/kitsu:latest \
+  --push \
+  .
+```
+
+**Note:** Requires `Dockerfile.prod` (see below) and a pre-built `dist/` folder.
+
+### Option 2: Full build in Docker
+
+```bash
+# Build and push for multiple platforms
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t your-registry/kitsu:latest \
+  --push \
+  .
+```
+
+**Note:** This runs the full npm build inside Docker for each platform, which can be slow.
+
+### Dockerfile.prod (for pre-built assets)
+
+Create `Dockerfile.prod` for faster multi-platform builds:
+
+```dockerfile
+FROM nginx:alpine
+
+RUN apk add --no-cache gettext
+
+COPY dist /usr/share/nginx/html
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+EXPOSE 80
+
+ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+### GCP Artifact Registry Example
+
+```bash
+# Authenticate
+gcloud auth configure-docker us-central1-docker.pkg.dev
+
+# Create repository (if needed)
+gcloud artifacts repositories create kitsu-repo \
+  --repository-format=docker \
+  --location=us-central1
+
+# Build locally
+npm run build
+
+# Build and push multi-platform
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -f Dockerfile.prod \
+  -t us-central1-docker.pkg.dev/YOUR_PROJECT/kitsu-repo/kitsu:latest \
+  --push \
+  .
+```
+
+### Pull and Run on Target Platform
+
+```bash
+# On your server (automatically pulls correct architecture)
+docker pull us-central1-docker.pkg.dev/YOUR_PROJECT/kitsu-repo/kitsu:latest
+docker compose up -d
+```
 
 ## Development
 
